@@ -12,12 +12,13 @@ from azure.search.documents.indexes.models import (
     SimpleField,
 )
 import math
+import datetime
 
 load_dotenv()
 
 comanDict = {
-    "Actua": "1482edab-dac9-4400-bcd7-ab2dd28b96d2",
-    # "Dossiers": "8516a849-55ee-4f7a-ad33-e7c6b089ee8f",
+    # "Actua": "1482edab-dac9-4400-bcd7-ab2dd28b96d2",
+    "Dossiers": "8516a849-55ee-4f7a-ad33-e7c6b089ee8f",
     # "Rechtspraak": "b8c42024-2e29-4e50-b05b-8c888e85f932",
     # "Syllabi": "21340ce4-1459-45c0-983d-8ae7f048fcf0",
     # "Vraag&antwoord": "48a35c82-ed45-4cc2-87b6-cbbd6160f870",
@@ -105,6 +106,12 @@ fields = [
         filterable=True,
     ),
     SearchableField(
+        name="title",
+        type=SearchFieldDataType.String,
+        searchable=False,
+        filterable=True,
+    ),
+    SearchableField(
         name="is_public",
         type=SearchFieldDataType.Boolean,
         searchable=False,
@@ -135,14 +142,44 @@ fields = [
         filterable=True,
     ),
     SearchableField(
-        name="links",
+        name="document_id",
+        type=SearchFieldDataType.String,
+        searchable=False,
+        filterable=True,
+    ),
+    SearchableField(
+        name="document_name",
+        type=SearchFieldDataType.String,
+        searchable=False,
+        filterable=True,
+    ),
+    SearchableField(
+        name="document_link",
+        type=SearchFieldDataType.String,
+        searchable=False,
+        filterable=True,
+    ),
+    SearchableField(
+        name="document_type",
+        type=SearchFieldDataType.String,
+        searchable=False,
+        filterable=True,
+    ),
+    SearchableField(
+        name="chunk_number",
+        type=SearchFieldDataType.String,
+        searchable=False,
+        filterable=True,
+    ),
+    SearchableField(
+        name="page",
         type=SearchFieldDataType.String,
         searchable=False,
         filterable=True,
     )
 ]
 
-index_name: str = "test-index-coman"
+index_name: str = "test-index-coman-documents"
 vector_store: AzureSearch = AzureSearch(
     azure_search_endpoint="https://orisai-search-development.search.windows.net",
     azure_search_key=AZURE_SEARCH_KEY,
@@ -151,19 +188,22 @@ vector_store: AzureSearch = AzureSearch(
     fields=fields
 )
 
+print('start loading: ', datetime.datetime.now())
 for scheme in comanDict:
     loader = ComanLoader.ComanLoader(comanDict[scheme], comanContentSchemeFields[scheme], scheme)
 
     documents = loader.lazy_load()
     amountDocs = len(documents)
+    # print("Amount of docs: " + str(amountDocs))
     batchSize = 500
     for i in range(math.ceil(amountDocs / batchSize)):
-        print(i)
+        # print(i)
         start = i * batchSize
         end = ((i + 1) * batchSize) if (i + 1) * batchSize < amountDocs else amountDocs
         print("loading from " + str(start) + " to " + str(end))
         # Upload to azure search with batch size, because otherwise we get an error: Request is too large
-        # vector_store.add_documents(documents[start:end])
+        vector_store.add_documents(documents[start:end])
 
     print(scheme + " done")
+    print('done loading ' + scheme + ': ', datetime.datetime.now())
 # docs = vector_store.similarity_search("Wanneer wordt Brusselse woonfiscaliteit hervormd?", k=2, filters="source eq '3f37ed58-cd2b-4c76-af56-b1b5fb5a8861'")

@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from langchain_community.document_loaders import PyPDFLoader, TextLoader
+from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores.azuresearch import AzureSearch
 from langchain_openai import AzureOpenAIEmbeddings
 
@@ -24,8 +24,7 @@ vector_store: AzureSearch = AzureSearch(
     embedding_function=embeddings.embed_query,
 )
 
-# loader = PyPDFLoader("app/data/ticket.PDF")
-loader = TextLoader("app/data/text.txt")
+loader = PyPDFLoader("app/data/ticket.PDF")
 
 docs = loader.load()
 

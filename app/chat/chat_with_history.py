@@ -40,7 +40,7 @@ class CustomHandler(BaseCallbackHandler):
 
 load_dotenv()
 
-index_name="demo-index-coman"
+index_name="test-index-coman-documents"
 
 llm = AzureChatOpenAI(
     openai_api_version=str(os.getenv("AZURE_OPENAI_API_VERSION")),
@@ -214,9 +214,9 @@ Vervolgens wordt deze systeem prompt, samen met de inhoud van die documenten naa
             sources=[]
             for c in output['context']:
                 if c.metadata['type'] == "Actua":                    
-                    sources.append(f"[{c.metadata['type']}](https://cib-website-development.azurewebsites.net/actua/{c.metadata['source']}/blabla)")
+                    sources.append(f"[{c.metadata['title']}](https://cib-website-development.azurewebsites.net/actua/{c.metadata['source']}/blabla)")
                 else:
-                    sources.append(f"[{c.metadata['type']}](https://cib-website-development.azurewebsites.net/kennis/{c.metadata['source']}/blabla)")
+                    sources.append(f"[{c.metadata['title']}](https://cib-website-development.azurewebsites.net/kennis/{c.metadata['source']}/blabla)")
             if(len(sources) > 0):
                 answer += "\n#### Bronnen:\n" 
                 answer += "\n".join(sources)
