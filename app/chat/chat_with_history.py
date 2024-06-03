@@ -14,6 +14,30 @@ from langchain_community.vectorstores.azuresearch import AzureSearch
 from langchain_openai import AzureOpenAIEmbeddings
 from langchain.callbacks.base import BaseCallbackHandler
 from CustomAzureSearchVectorStoreRetriever import CustomAzureSearchVectorStoreRetriever
+from azure.data.tables import TableServiceClient
+from azure.core.credentials import AzureNamedKeyCredential
+from langchain.schema import LLMResult
+import uuid
+from datetime import datetime
+
+
+credential = AzureNamedKeyCredential(str(os.getenv("AZURE_STORAGE_NAME")), str(os.getenv("AZURE_TABLES_KEY")))
+table_service_client = TableServiceClient(
+    endpoint=str(os.getenv("AZURE_TABLES_URL")), credential=credential
+)
+table_client = table_service_client.get_table_client(table_name=str(os.getenv("AZURE_TABLE_NAME")))
+
+
+def log_interaction(question, answer, prompt):
+    log_entry = {
+            "PartitionKey": "LLMLogs",
+            "RowKey": str(uuid.uuid4()),
+            "Question": question,
+            "Answer": answer,
+            "Prompt": prompt,
+            "Timestamp": datetime.now().isoformat()
+        }
+    table_client.create_entity(entity=log_entry)
 
 class InMemoryHistory(BaseChatMessageHistory, BaseModel):
     """In memory implementation of chat message history."""
@@ -28,19 +52,24 @@ class InMemoryHistory(BaseChatMessageHistory, BaseModel):
         self.messages = []
 
 class CustomHandler(BaseCallbackHandler):
+    def __init__(self, question: str):
+        self.question = question
+        super().__init__()
 
     def on_llm_start(
         self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any
     ) -> Any:
-        formatted_prompts = "\n".join(prompts)
-        st.session_state["last_generated_prompt"]=formatted_prompts
-        # print(formatted_prompts)
+        self.prompt = "\n".join(prompts)
+    
+    def on_llm_end(self, response: LLMResult, **kwargs: Any) -> Any:
+        answer = response.generations[0][0].text
+        log_interaction(self.question, answer, self.prompt)
 
 # https://python.langchain.com/v0.1/docs/use_cases/question_answering/chat_history/
 
 load_dotenv()
 
-index_name="test-index-coman-documents"
+index_name="production-index-coman-documents-without-images"
 
 llm = AzureChatOpenAI(
     openai_api_version=str(os.getenv("AZURE_OPENAI_API_VERSION")),
@@ -98,8 +127,9 @@ def create_conversational_rag_chain(system_prompt, context, nr_of_docs_to_retrie
 
     ### Answer question ###
     qa_system_prompt = system_prompt + """"
-
-    {context}"""
+    <context>
+    {context}
+    </context>"""
     qa_prompt = ChatPromptTemplate.from_messages(
         [
             ("system", qa_system_prompt),
@@ -135,7 +165,7 @@ def create_conversational_rag_chain(system_prompt, context, nr_of_docs_to_retrie
 def document_data(conversational_rag_chain: RunnableWithMessageHistory, query):    
     return conversational_rag_chain.invoke(
         {"input": query},
-        config={"configurable": {"session_id": "abc123"},"callbacks": [CustomHandler()], "metadata": {"filters": "source eq '123'"}},
+        config={"configurable": {"session_id": "abc123"},"callbacks": [CustomHandler(question=query)], "metadata": {"filters": "source eq '123'"}},
     )   
     
 if __name__ == '__main__':
@@ -154,7 +184,9 @@ if __name__ == '__main__':
     with st.sidebar:
         system_prompt = st.text_area(value="""You are an assistant for question-answering tasks. 
                                      
-You can use the following pieces of retrieved context to answer the question. 
+You can only use the following pieces of retrieved context to answer the question. 
+                                     
+If you cannot answer the answer with the provided context or there is no context provided, inform the user that you cannot answer the question
                                      
 Use three sentences maximum and keep the answer concise.
                                      

@@ -20,3 +20,5 @@ If you want to learn more about creating good readme files then refer the follow
 - [Chakra Core](https://github.com/Microsoft/ChakraCore)
 
 
+# Generate requirements from poetry 
+poetry export --without-hashes --format=requirements.txt > requirements.txt

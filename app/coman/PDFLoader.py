@@ -23,7 +23,7 @@ class PDFLoader():
         self.document_type = document_type
 
     def lazy_load(self) -> List[Document]:  # <-- Does not take any arguments
-        loader = PyPDFLoader(self.file_path, extract_images=True)
+        loader = PyPDFLoader(self.file_path, extract_images=False)
         docs = loader.load()
         consecutiveDotsRemover = re.compile(r'\.{3,}')
         text_splitter = RecursiveCharacterTextSplitter(

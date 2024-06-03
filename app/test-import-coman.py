@@ -4,6 +4,8 @@ import os
 from dotenv import load_dotenv
 from langchain_community.vectorstores.azuresearch import AzureSearch
 from langchain_openai import AzureOpenAIEmbeddings
+from langchain_community.document_transformers import Html2TextTransformer
+from langchain.schema import Document
 from coman import ComanLoader
 from azure.search.documents.indexes.models import (
     SearchableField,
@@ -13,15 +15,17 @@ from azure.search.documents.indexes.models import (
 )
 import math
 import datetime
+import time
+
 
 load_dotenv()
 
 comanDict = {
     # "Actua": "1482edab-dac9-4400-bcd7-ab2dd28b96d2",
-    "Dossiers": "8516a849-55ee-4f7a-ad33-e7c6b089ee8f",
+    # "Dossiers": "8516a849-55ee-4f7a-ad33-e7c6b089ee8f",
     # "Rechtspraak": "b8c42024-2e29-4e50-b05b-8c888e85f932",
     # "Syllabi": "21340ce4-1459-45c0-983d-8ae7f048fcf0",
-    # "Vraag&antwoord": "48a35c82-ed45-4cc2-87b6-cbbd6160f870",
+    "Vraag&antwoord": "48a35c82-ed45-4cc2-87b6-cbbd6160f870",
     # "Media": "e1381008-7228-4261-b92b-6d8b4152874a"
 }
 
@@ -122,6 +126,7 @@ fields = [
         type=SearchFieldDataType.DateTimeOffset,
         searchable=False,
         filterable=True,
+        sortable=True
     ),
     SearchableField(
         name="categories",
@@ -179,7 +184,7 @@ fields = [
     )
 ]
 
-index_name: str = "test-index-coman-documents"
+index_name: str = "test-sortable-date"
 vector_store: AzureSearch = AzureSearch(
     azure_search_endpoint="https://orisai-search-development.search.windows.net",
     azure_search_key=AZURE_SEARCH_KEY,
@@ -188,14 +193,19 @@ vector_store: AzureSearch = AzureSearch(
     fields=fields
 )
 
+html2text = Html2TextTransformer()
+
 print('start loading: ', datetime.datetime.now())
 for scheme in comanDict:
     loader = ComanLoader.ComanLoader(comanDict[scheme], comanContentSchemeFields[scheme], scheme)
 
     documents = loader.lazy_load()
+    # Transform the document (html to text, skip images, etc.)
+    documents = html2text.transform_documents(documents)
     amountDocs = len(documents)
     # print("Amount of docs: " + str(amountDocs))
     batchSize = 500
+    print('total amount of docs to load: ', amountDocs)
     for i in range(math.ceil(amountDocs / batchSize)):
         # print(i)
         start = i * batchSize
@@ -203,6 +213,7 @@ for scheme in comanDict:
         print("loading from " + str(start) + " to " + str(end))
         # Upload to azure search with batch size, because otherwise we get an error: Request is too large
         vector_store.add_documents(documents[start:end])
+        time.sleep(2)
 
     print(scheme + " done")
     print('done loading ' + scheme + ': ', datetime.datetime.now())

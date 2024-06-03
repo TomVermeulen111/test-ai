@@ -4,7 +4,9 @@ from langchain_community.retrievers import AzureAISearchRetriever
 from langchain_core.retrievers import BaseRetriever
 from app.chat.CustomAzureSearchVectorStoreRetriever import CustomAzureSearchVectorStoreRetriever
 from langchain_community.vectorstores.azuresearch import AzureSearch
+from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
+
 
 def init_vector_store() -> AzureSearch:
     embeddings = AzureOpenAIEmbeddings(
@@ -45,8 +47,7 @@ def init_custom_retriever(k: int, filters: str | None, score_threshold: float, s
     )
 
 def init_search_client():
-    return SearchClient(
-        endpoint=str(os.getenv("BASE_URL")), 
-        api_key=str(os.getenv("AZURE_SEARCH_KEY")), 
-        index_name=str(os.getenv("INDEX_NAME"))
-    )
+    service_endpoint = str(os.getenv("BASE_URL"))
+    index_name = str(os.getenv("INDEX_NAME"))
+    key = str(os.getenv("AZURE_SEARCH_KEY"))
+    return SearchClient(service_endpoint, index_name, AzureKeyCredential(key))

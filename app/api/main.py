@@ -1,9 +1,10 @@
 import sys
+from typing import Literal
 sys.path.insert(0, "app")
 sys.path.insert(0, "app/api")
 from fastapi import FastAPI
 from dotenv import load_dotenv
-from app.api.search_in_vector_store import search_in_vector_store
+from app.api.search import search
 from app.api.retrieval_augmented_generation import retrieval_augmented_generation
 
 app = FastAPI()
@@ -20,9 +21,15 @@ You will have a chat history, but you must only answer the last question.
                                      
 You MUST answer in dutch."""
 
-@app.get("/search_in_vector_store/{question}")
-def get_search_in_vector_store(question: str, addVectors: bool = False):
-    return search_in_vector_store(question, addVectors)
+@app.get("/search/{question}")
+def get_search(question: str, 
+    schema_filter: str | None = None,
+    order_by_date: bool = False,
+    addVectors: bool = False, 
+    search_type: Literal['hybrid_search','similarity_search', 'vector_search', 'simple_text']='similarity_search', 
+    nr_of_documents_to_return=10,
+    ):
+    return search(question, addVectors, search_type, nr_of_documents_to_return, schema_filter, order_by_date)
 
 
 @app.get("/retrieval_augmented_generation")
