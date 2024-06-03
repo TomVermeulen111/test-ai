@@ -15,6 +15,8 @@ from langchain_core.pydantic_v1 import root_validator
 from langchain_core.retrievers import BaseRetriever
 from langchain_community.vectorstores.azuresearch import AzureSearch
 
+from chat_state import ChatState
+
 class CustomAzureSearchVectorStoreRetriever(BaseRetriever):
     """Retriever that uses `Azure Cognitive Search`."""
 
@@ -93,6 +95,7 @@ class CustomAzureSearchVectorStoreRetriever(BaseRetriever):
             ]
         else:
             raise ValueError(f"search_type of {self.search_type} not allowed.")
+        ChatState.documents = docs
         return docs
 
     async def _aget_relevant_documents(
