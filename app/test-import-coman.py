@@ -1,4 +1,6 @@
 import sys
+
+from chat.coman_schemes import ComanScheme
 sys.path.insert(0, "app/coman")
 import os
 from dotenv import load_dotenv
@@ -21,44 +23,49 @@ import time
 load_dotenv()
 
 comanDict = {
-    # "Actua": "1482edab-dac9-4400-bcd7-ab2dd28b96d2",
-    # "Dossiers": "8516a849-55ee-4f7a-ad33-e7c6b089ee8f",
-    # "Rechtspraak": "b8c42024-2e29-4e50-b05b-8c888e85f932",
-    # "Syllabi": "21340ce4-1459-45c0-983d-8ae7f048fcf0",
-    "Vraag&antwoord": "48a35c82-ed45-4cc2-87b6-cbbd6160f870",
-    # "Media": "e1381008-7228-4261-b92b-6d8b4152874a"
+    # ComanScheme.ACTUA.value: "1482edab-dac9-4400-bcd7-ab2dd28b96d2",
+    # ComanScheme.DOSSIERS.value: "8516a849-55ee-4f7a-ad33-e7c6b089ee8f",
+    # ComanScheme.JURISDICTION.value: "b8c42024-2e29-4e50-b05b-8c888e85f932",
+    # ComanScheme.SYLLABI.value: "21340ce4-1459-45c0-983d-8ae7f048fcf0",
+    # ComanScheme.QUESTION_ANSWER.value: "48a35c82-ed45-4cc2-87b6-cbbd6160f870",
+    # ComanScheme.MEDIA.value: "e1381008-7228-4261-b92b-6d8b4152874a",
+    ComanScheme.WEBTEXTS.value: "24230396-013a-442d-92dd-cfb6338f8203"
 }
 
 comanContentSchemeFields = {
-    "Actua": [
+    ComanScheme.ACTUA.value: [
         "Title",
         "Introduction",
         "Full_text"
     ],
-    "Dossiers": [
+    ComanScheme.DOSSIERS.value: [
         "Title",
         "Description",
         "Short_description"
     ],
-    "Rechtspraak": [
+    ComanScheme.JURISDICTION.value: [
         "Title",
         "Introduction",
         "Description"
     ],
-    "Syllabi": [
+    ComanScheme.SYLLABI.value: [
         "Title",
         "Short_description"
     ],
-    "Vraag&antwoord": [
+    ComanScheme.QUESTION_ANSWER.value: [
         "Title",
         "Short_description",
         "Answer",
         "Conclusion"
     ],
-    "Media": [
+    ComanScheme.MEDIA.value: [
         "Title",
         "Full_text",
         "Introduction",
+    ],
+    ComanScheme.WEBTEXTS.value: [
+        "Title",
+        "Long_description"
     ]
 }
 
@@ -126,7 +133,7 @@ fields = [
         type=SearchFieldDataType.DateTimeOffset,
         searchable=False,
         filterable=True,
-        sortable=True
+        sortable=True,
     ),
     SearchableField(
         name="categories",
@@ -210,6 +217,7 @@ for scheme in comanDict:
         # print(i)
         start = i * batchSize
         end = ((i + 1) * batchSize) if (i + 1) * batchSize < amountDocs else amountDocs
+
         print("loading from " + str(start) + " to " + str(end))
         # Upload to azure search with batch size, because otherwise we get an error: Request is too large
         vector_store.add_documents(documents[start:end])

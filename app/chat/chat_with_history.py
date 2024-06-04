@@ -69,7 +69,6 @@ class CustomHandler(BaseCallbackHandler):
     
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> Any:
         ChatState.answer = response.generations[0][0].text
-        print(ChatState.question, ChatState.answer, ChatState.prompt, ChatState.documents)
         log_interaction(ChatState.question, ChatState.answer, ChatState.prompt, ChatState.documents, ChatState.chain_id)
 
 # https://python.langchain.com/v0.1/docs/use_cases/question_answering/chat_history/
@@ -196,13 +195,15 @@ if __name__ == '__main__':
                                      
 You can only use the following pieces of retrieved context to answer the question. 
                                      
-If you cannot answer the answer with the provided context or there is no context provided, inform the user that you cannot answer the question
+If you cannot answer the answer with the provided context or there is no context provided, inform the user that you do not have enough information to answer the question
                                      
 Use three sentences maximum and keep the answer concise.
                                      
 You will have a chat history, but you must only answer the last question.
                                      
-You MUST answer in dutch.""", label="Systeem prompt", height=275
+You MUST answer in dutch.
+                                     
+The date of today is: """ + str(datetime.now()), label="Systeem prompt", height=275
 , help="""Eerst wordt gezocht naar de x (hieronder te configureren) best matchende documenten in de vector store. 
 Vervolgens wordt deze systeem prompt, samen met de inhoud van die documenten naar de llm gestuurd om een antwoord te genereren
 """)
