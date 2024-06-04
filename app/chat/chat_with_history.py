@@ -1,19 +1,9 @@
 from dotenv import load_dotenv
 import os
-from langchain_openai import AzureChatOpenAI
-from langchain.chains import create_history_aware_retriever, create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
 import streamlit as st
 from typing import Any, Dict, List
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.pydantic_v1 import BaseModel, Field
-from langchain_core.messages import BaseMessage
-from langchain_community.vectorstores.azuresearch import AzureSearch
-from langchain_openai import AzureOpenAIEmbeddings
 from langchain.callbacks.base import BaseCallbackHandler
-from CustomAzureSearchVectorStoreRetriever import CustomAzureSearchVectorStoreRetriever
 from azure.data.tables import TableServiceClient
 from azure.core.credentials import AzureNamedKeyCredential
 from langchain.schema import LLMResult
@@ -22,7 +12,9 @@ from datetime import datetime
 from chat_state import ChatState
 from langchain_core.documents import Document
 import json
+from conversational_rag_chain import create_conversational_rag_chain
 
+load_dotenv()
 
 credential = AzureNamedKeyCredential(str(os.getenv("AZURE_STORAGE_NAME")), str(os.getenv("AZURE_TABLES_KEY")))
 table_service_client = TableServiceClient(
@@ -48,19 +40,6 @@ def log_interaction(question: str, answer: str, prompt: str, documents: List[Doc
         }
     table_client.create_entity(entity=log_entry)
 
-
-class InMemoryHistory(BaseChatMessageHistory, BaseModel):
-    """In memory implementation of chat message history."""
-
-    messages: List[BaseMessage] = Field(default_factory=list)
-
-    def add_messages(self, messages: List[BaseMessage]) -> None:
-        """Add a list of messages to the store"""
-        self.messages.extend(messages)
-
-    def clear(self) -> None:
-        self.messages = []
-
 class CustomHandler(BaseCallbackHandler):
     def on_llm_start(
         self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any
@@ -70,103 +49,6 @@ class CustomHandler(BaseCallbackHandler):
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> Any:
         ChatState.answer = response.generations[0][0].text
         log_interaction(ChatState.question, ChatState.answer, ChatState.prompt, ChatState.documents, ChatState.chain_id)
-
-# https://python.langchain.com/v0.1/docs/use_cases/question_answering/chat_history/
-
-load_dotenv()
-
-index_name="production-index-coman-documents-without-images"
-
-llm = AzureChatOpenAI(
-    openai_api_version=str(os.getenv("AZURE_OPENAI_API_VERSION")),
-    azure_deployment=str(os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME")),
-)
-
-AZURE_SEARCH_KEY = str(os.getenv("AZURE_SEARCH_KEY"))
-
-def get_filter_for_context(context):
-    if context =="CIB-lid":
-        return None
-    elif context == "Niet CIB-lid":
-        return "is_public eq 'True'"
-    elif context == "Syllabusverbod":
-        return "type ne 'Syllabi'"
-        
-def create_conversational_rag_chain(system_prompt, context, nr_of_docs_to_retrieve, score_threshold):
-    
-    ### Contextualize question ###
-    contextualize_q_system_prompt = """Given a chat history and the latest user question \
-    which might reference context in the chat history, formulate a standalone question \
-    which can be understood without the chat history. Do NOT answer the question, \
-    just reformulate it if needed and otherwise return it as is."""
-    contextualize_q_prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", contextualize_q_system_prompt),
-            MessagesPlaceholder("chat_history"),
-            ("human", "{input}"),
-        ]
-    )
-   
-    embeddings = AzureOpenAIEmbeddings(
-        azure_deployment="orisai-text-embedding-3-large-development",
-    )
-
-    vector_store: AzureSearch = AzureSearch(
-        azure_search_endpoint=str(os.getenv("BASE_URL")),
-        azure_search_key=AZURE_SEARCH_KEY,
-        index_name=index_name,
-        embedding_function=embeddings.embed_query
-    )
-
-    retriever = CustomAzureSearchVectorStoreRetriever(
-        vectorstore=vector_store, 
-        k=nr_of_docs_to_retrieve, 
-        filters=get_filter_for_context(context), 
-        tags=vector_store._get_retriever_tags(),
-        search_type="similarity_score_threshold",
-        score_threshold=score_threshold
-    )
-                                                         
-    history_aware_retriever = create_history_aware_retriever(
-        llm, retriever, contextualize_q_prompt
-    )
-
-    ### Answer question ###
-    qa_system_prompt = system_prompt + """"
-    <context>
-    {context}
-    </context>"""
-    qa_prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", qa_system_prompt),
-            MessagesPlaceholder("chat_history"),
-            ("human", "{input}"),
-        ]
-    )
-    question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
-
-    rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
-
-
-    ### Statefully manage chat history ###
-    if "store" not in st.session_state:
-        st.session_state["store"] = {}
-
-    def get_session_history(session_id: str) -> BaseChatMessageHistory:
-        if session_id not in st.session_state["store"]:
-            st.session_state["store"][session_id] = InMemoryHistory()
-        return st.session_state["store"][session_id]
-    
-
-    conversational_rag_chain = RunnableWithMessageHistory(
-        rag_chain,
-        get_session_history,
-        input_messages_key="input",
-        history_messages_key="chat_history",
-        output_messages_key="answer",
-    )
-    
-    return conversational_rag_chain
 
 
 def document_data(conversational_rag_chain: RunnableWithMessageHistory, query):    
@@ -195,7 +77,7 @@ if __name__ == '__main__':
                                      
 You can only use the following pieces of retrieved context to answer the question. 
                                      
-If you cannot answer the answer with the provided context or there is no context provided, inform the user that you do not have enough information to answer the question
+If you cannot answer the question with the provided context or there is no context provided, inform the user that you do not have enough information to answer the question
                                      
 Use three sentences maximum and keep the answer concise.
                                      
@@ -236,9 +118,9 @@ Vervolgens wordt deze systeem prompt, samen met de inhoud van die documenten naa
             sources=[]
             for c in output['context']:
                 if c.metadata['type'] == "Actua":                    
-                    sources.append(f"[{c.metadata['title']}](https://cib.be/actua/{c.metadata['source']}/blabla)")
+                    sources.append(f"[{c.metadata['title']}](https://cib.be/actua/{c.metadata['source']}/blabla)\n")
                 else:
-                    sources.append(f"[{c.metadata['title']}](https://cib.be/kennis/{c.metadata['source']}/blabla)")
+                    sources.append(f"[{c.metadata['title']}](https://cib.be/kennis/{c.metadata['source']}/blabla)\n")
             if(len(sources) > 0):
                 answer += "\n#### Bronnen:\n" 
                 answer += "\n".join(sources)

@@ -30,7 +30,7 @@ model = AzureChatOpenAI(
 )
 
 chain = prompt | model | JsonOutputParser() | itemgetter("arguments") | write_email
-result = chain.invoke({"input": "Bij een gesplitste aankoop wordt de eigendom van een onroerend goed verdeeld tussen de ouders en de kinderen. De ouders kopen het vruchtgebruik, wat hen het recht geeft om het pand te gebruiken en de vruchten ervan te ontvangen, terwijl de kinderen de blote eigendom kopen, wat hen het recht geeft om volle eigenaar te worden na het overlijden van de ouders. Deze techniek wordt vaak gebruikt om erfbelasting te vermijden. Het is echter belangrijk om te voldoen aan de fiscale regels en het mogelijke vermoeden van bedekte bevoordeling door de fiscus.", "name": "Miguel"})
+result = chain.invoke({"input": "Bij een gesplitste aankoop wordt de eigendom van een onroerend goed verdeeld tussen de ouders en de kinderen. De ouders kopen het vruchtgebruik, wat hen het recht geeft om het pand te gebruiken en de vruchten ervan te ontvangen, terwijl de kinderen de blote eigendom kopen, wat hen het recht geeft om volle eigenaar te worden na het overlijden van de ouders. Deze techniek wordt vaak gebruikt om erfbelasting te vermijden. Het is echter belangrijk om te voldoen aan de fiscale regels en het mogelijke vermoeden van bedekte bevoordeling door de fiscus.", "userName": "Miguel"})
 
 print(result)
 

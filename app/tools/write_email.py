@@ -5,30 +5,17 @@ from langchain_community.tools import ShellTool
 
 class EmailInput(BaseModel):
     email_input: str = Field(description="should be the content of the email."),
-    name: str = Field(description="should be the name of the sender.")
+    userName: str = Field(description="should be the name of the sender.")
  
 
-@tool("write-email", args_schema=EmailInput, return_direct=True)
-def write_email(email_input: str, name: str) -> str:
-    """useful when you need to generate an email based on the response."""
+@tool("write_email", args_schema=EmailInput, return_direct=True)
+def write_email(email_input: str, userName: str) -> str:
+    """Useful when you need to generate an email based on the response or rewrite a response as an email."""
     print("Writing email now")
     return f"""Beste,
     Via deze email willen we u informeren over:
-    ${email_input}
+    {email_input}
 
     Met vriendelijke groeten,
-    {name}
+    {userName}
     """
-
-
-# Define the email tool
-# class WriteEmailTool(StructuredTool):
-#     response: str = Field(...)
-
-#     def run(self) -> str:
-#         """Write an email to the user based on the response."""
-#         print("Writing email now")
-#         return f"""Beste,
-#         Via deze email willen we u informeren over:
-#         {self.response}
-#         """
