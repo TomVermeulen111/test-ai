@@ -15,7 +15,7 @@ from langchain_core.pydantic_v1 import root_validator
 from langchain_core.retrievers import BaseRetriever
 from langchain_community.vectorstores.azuresearch import AzureSearch
 
-from coman_schemes import ComanScheme€
+from coman_schemes import ComanScheme
 from chat_state import ChatState
 
 class CustomAzureSearchVectorStoreRetriever(BaseRetriever):
