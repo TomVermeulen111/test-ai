@@ -26,13 +26,16 @@ class PDFLoader():
         loader = PyPDFLoader(self.file_path, extract_images=False)
         docs = loader.load()
         consecutiveDotsRemover = re.compile(r'\.{3,}')
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=700,
-            chunk_overlap=0,
-            length_function=len
-        )
-        splitted = text_splitter.split_documents(docs)
-        for idx, split in enumerate(splitted):
+
+        # standard PyPDFLoader chunks the pdf per page
+
+        # text_splitter = RecursiveCharacterTextSplitter(
+        #     chunk_size=700,
+        #     chunk_overlap=0,
+        #     length_function=len
+        # )
+        # splitted = text_splitter.split_documents(docs)
+        for idx, split in enumerate(docs):
             content = split.page_content.replace('\n', ' ')
             content = consecutiveDotsRemover.sub('', content)
             split.page_content = content
@@ -43,6 +46,6 @@ class PDFLoader():
             split.metadata["document_name"] = str(self.document_name)
             split.metadata["document_link"] = str(self.file_path)
             split.metadata["document_type"] = str(self.document_type)
-        return splitted
+        return docs
     
     #TODO: Implement pdf's with images in them (OCR <=> Vision model (4o))

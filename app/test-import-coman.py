@@ -29,7 +29,10 @@ comanDict = {
     # ComanScheme.SYLLABI.value: "21340ce4-1459-45c0-983d-8ae7f048fcf0",
     # ComanScheme.QUESTION_ANSWER.value: "48a35c82-ed45-4cc2-87b6-cbbd6160f870",
     # ComanScheme.MEDIA.value: "e1381008-7228-4261-b92b-6d8b4152874a",
-    ComanScheme.WEBTEXTS.value: "24230396-013a-442d-92dd-cfb6338f8203"
+    # ComanScheme.WEBTEXTS.value: "24230396-013a-442d-92dd-cfb6338f8203"
+    ComanScheme.DEPARTMENTS.value: "6fbe435f-d2ce-415a-93d9-f7f83b28db25",
+    ComanScheme.TOOLS.value: "15d6b179-6fb0-4b25-b4f5-afb066dcc6df",
+    ComanScheme.EVENTS.value: "b47061f1-3cec-4c98-8fa6-5d012ee61dc1",
 }
 
 comanContentSchemeFields = {
@@ -66,12 +69,33 @@ comanContentSchemeFields = {
     ComanScheme.WEBTEXTS.value: [
         "Title",
         "Long_description"
-    ]
+    ],
+    ComanScheme.DEPARTMENTS.value: [
+        "Name",
+        "Description",
+        "Address",
+        "Telephone",
+        "Email",
+        "Member_consulent",
+        "Member_consulent_email",
+        "Member_consulent_telephone"
+    ],
+    ComanScheme.TOOLS.value: [
+        "Name",
+        "Description",
+        "Description_advantage",
+        "Full_description_tool",
+    ],
+    ComanScheme.EVENTS.value: [
+        "Date",
+        "Description",
+        "Name",
+    ],
 }
 
 AZURE_SEARCH_KEY = str(os.getenv("AZURE_SEARCH_KEY"))
 embeddings = AzureOpenAIEmbeddings(
-    azure_deployment="orisai-text-embedding-3-large-development",
+    azure_deployment=str(os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME")),
 )
 
 fields = [
@@ -191,9 +215,9 @@ fields = [
     )
 ]
 
-index_name: str = "test-sortable-date"
+index_name: str = os.getenv("AZURE_SEARCH_INDEX_NAME")
 vector_store: AzureSearch = AzureSearch(
-    azure_search_endpoint="https://orisai-search-development.search.windows.net",
+    azure_search_endpoint=str(os.getenv("AZURE_SEARCH_BASE_URL")),
     azure_search_key=AZURE_SEARCH_KEY,
     index_name=index_name,
     embedding_function=embeddings.embed_query,

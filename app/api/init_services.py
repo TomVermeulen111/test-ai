@@ -6,6 +6,8 @@ from app.chat.CustomAzureSearchVectorStoreRetriever import CustomAzureSearchVect
 from langchain_community.vectorstores.azuresearch import AzureSearch
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
+from azure.data.tables import TableServiceClient
+from azure.core.credentials import AzureNamedKeyCredential
 
 
 def init_vector_store() -> AzureSearch:
@@ -14,14 +16,14 @@ def init_vector_store() -> AzureSearch:
     )
 
     return AzureSearch(
-        azure_search_endpoint=str(os.getenv("BASE_URL")),
+        azure_search_endpoint=str(os.getenv("AZURE_SEARCH_BASE_URL")),
         azure_search_key=str(os.getenv("AZURE_SEARCH_KEY")),
-        index_name=str(os.getenv("INDEX_NAME")),
+        index_name=str(os.getenv("AZURE_SEARCH_INDEX_NAME")),
         embedding_function=embeddings.embed_query
     )
 
 def init_retriever(k) -> BaseRetriever:
-    index_name=str(os.getenv("INDEX_NAME"))
+    index_name=str(os.getenv("AZURE_SEARCH_INDEX_NAME"))
 
     AZURE_SEARCH_KEY = str(os.getenv("AZURE_SEARCH_KEY"))
 
@@ -47,7 +49,14 @@ def init_custom_retriever(k: int, filters: str | None, score_threshold: float, s
     )
 
 def init_search_client():
-    service_endpoint = str(os.getenv("BASE_URL"))
-    index_name = str(os.getenv("INDEX_NAME"))
+    service_endpoint = str(os.getenv("AZURE_SEARCH_BASE_URL"))
+    index_name = str(os.getenv("AZURE_SEARCH_INDEX_NAME"))
     key = str(os.getenv("AZURE_SEARCH_KEY"))
     return SearchClient(service_endpoint, index_name, AzureKeyCredential(key))
+
+def init_table_client(): 
+    credential = AzureNamedKeyCredential(str(os.getenv("AZURE_STORAGE_NAME")), str(os.getenv("AZURE_TABLES_KEY")))
+    table_service_client = TableServiceClient(
+        endpoint=str(os.getenv("AZURE_TABLES_URL")), credential=credential
+    )
+    return table_service_client.get_table_client(table_name=str(os.getenv("AZURE_TABLES_CHAT_LOGGING_NAME")))

@@ -11,7 +11,7 @@ class EmailInput(BaseModel):
     subject: str = Field(description="The subject of the email."),
  
 
-@tool("write_email", args_schema=EmailInput, return_direct=True, infer_schema=True)
+@tool("write_email", args_schema=EmailInput, return_direct=False, infer_schema=True)
 def write_email(email_input: str, sender: str, email_address: str, receiver: str, subject: str) -> str:
     """Tool that HAS to be used when you need to generate an email based on the response or rewrite a response as an email.
     A chatbot SHOULD ask for the necessary parameters to generate the email.

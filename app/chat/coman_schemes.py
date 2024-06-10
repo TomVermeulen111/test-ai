@@ -8,3 +8,6 @@ class ComanScheme(Enum):
     QUESTION_ANSWER="Vraag&antwoord"
     MEDIA="Media"
     WEBTEXTS="Webtexts"
+    DEPARTMENTS="Afdelingen/Kamers"
+    TOOLS="Tools"
+    EVENTS="Evenementen"

@@ -2,36 +2,38 @@ import os
 from langchain_openai import AzureChatOpenAI
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
-import streamlit as st
-from typing import List
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.pydantic_v1 import BaseModel, Field
-from langchain_core.messages import BaseMessage
 from langchain_community.vectorstores.azuresearch import AzureSearch
 from langchain_openai import AzureOpenAIEmbeddings
-from CustomAzureSearchVectorStoreRetriever import CustomAzureSearchVectorStoreRetriever
-from write_email import write_email
+from chat.CustomAzureSearchVectorStoreRetriever import CustomAzureSearchVectorStoreRetriever
+from chat.write_email import write_email
 from langchain.tools.render import render_text_description
-
-class InMemoryHistory(BaseChatMessageHistory, BaseModel):
-    """In memory implementation of chat message history."""
-
-    messages: List[BaseMessage] = Field(default_factory=list)
-
-    def add_messages(self, messages: List[BaseMessage]) -> None:
-        """Add a list of messages to the store"""
-        self.messages.extend(messages)
-
-    def clear(self) -> None:
-        self.messages = []
-
+from datetime import datetime
+from langchain_core.chat_history import InMemoryChatMessageHistory
         
-def create_conversational_rag_chain(system_prompt, context, nr_of_docs_to_retrieve, score_threshold):   
+def create_conversational_rag_chain(
+        system_prompt="""You are an assistant for question-answering tasks. 
+                                        
+    You can only use the following pieces of retrieved context to answer the question. 
+                                        
+    If you cannot answer the question with the provided context or there is no context provided, inform the user that you do not have enough information to answer the question
+                                        
+    Use three sentences maximum and keep the answer concise.
+                                        
+    You will have a chat history, but you must only answer the last question.
+                                        
+    You MUST answer in dutch.
+                                        
+    The date of today is: """ + str(datetime.now()), 
+        context="CIB-lid", 
+        nr_of_docs_to_retrieve=3, 
+        score_threshold=0.7, 
+        get_session_history=lambda session_id: InMemoryChatMessageHistory()
+    ):   
     # https://python.langchain.com/v0.1/docs/use_cases/question_answering/chat_history/
 
-    index_name=str(os.getenv("INDEX_NAME"))
+    index_name=str(os.getenv("AZURE_SEARCH_INDEX_NAME"))
 
     llm = AzureChatOpenAI(
         openai_api_version=str(os.getenv("AZURE_OPENAI_API_VERSION")),
@@ -58,15 +60,16 @@ def create_conversational_rag_chain(system_prompt, context, nr_of_docs_to_retrie
             ("system", contextualize_q_system_prompt),
             MessagesPlaceholder("chat_history"),
             ("human", "{input}"),
+            ("system", "reminder: do not answer the question, just reformulate it if needed")
         ]
     ).with_config()
    
     embeddings = AzureOpenAIEmbeddings(
-        azure_deployment="orisai-text-embedding-3-large-development",
+        azure_deployment=os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME"),
     )
 
     vector_store: AzureSearch = AzureSearch(
-        azure_search_endpoint=str(os.getenv("BASE_URL")),
+        azure_search_endpoint=str(os.getenv("AZURE_SEARCH_BASE_URL")),
         azure_search_key=AZURE_SEARCH_KEY,
         index_name=index_name,
         embedding_function=embeddings.embed_query
@@ -111,16 +114,6 @@ When a tool is available for a specific task, DO NOT ANSWER THE QUESTION YOURSEL
     question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
 
     rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
-
-    ### Statefully manage chat history ###
-    if "store" not in st.session_state:
-        st.session_state["store"] = {}
-
-    def get_session_history(session_id: str) -> BaseChatMessageHistory:
-        if session_id not in st.session_state["store"]:
-            st.session_state["store"][session_id] = InMemoryHistory()
-        return st.session_state["store"][session_id]
-    
 
     conversational_rag_chain = RunnableWithMessageHistory(
         rag_chain,
