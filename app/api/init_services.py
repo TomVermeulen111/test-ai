@@ -10,7 +10,7 @@ from azure.data.tables import TableServiceClient
 from azure.core.credentials import AzureNamedKeyCredential
 
 
-def init_vector_store() -> AzureSearch:
+def init_vector_store(index_name: str) -> AzureSearch:
     embeddings = AzureOpenAIEmbeddings(
         azure_deployment="orisai-text-embedding-3-large-development",
     )
@@ -18,7 +18,7 @@ def init_vector_store() -> AzureSearch:
     return AzureSearch(
         azure_search_endpoint=str(os.getenv("AZURE_SEARCH_BASE_URL")),
         azure_search_key=str(os.getenv("AZURE_SEARCH_KEY")),
-        index_name=str(os.getenv("AZURE_SEARCH_INDEX_NAME")),
+        index_name=index_name,
         embedding_function=embeddings.embed_query
     )
 
@@ -48,9 +48,8 @@ def init_custom_retriever(k: int, filters: str | None, score_threshold: float, s
         score_threshold=score_threshold
     )
 
-def init_search_client():
+def init_search_client(index_name:str):
     service_endpoint = str(os.getenv("AZURE_SEARCH_BASE_URL"))
-    index_name = str(os.getenv("AZURE_SEARCH_INDEX_NAME"))
     key = str(os.getenv("AZURE_SEARCH_KEY"))
     return SearchClient(service_endpoint, index_name, AzureKeyCredential(key))
 

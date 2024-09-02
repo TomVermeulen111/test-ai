@@ -1,14 +1,14 @@
 import sys
 
 from chat.coman_schemes import ComanScheme
-sys.path.insert(0, "app/coman")
+sys.path.insert(0, "app/loaders")
 import os
 from dotenv import load_dotenv
 from langchain_community.vectorstores.azuresearch import AzureSearch
 from langchain_openai import AzureOpenAIEmbeddings
 from langchain_community.document_transformers import Html2TextTransformer
 from langchain.schema import Document
-from coman import ComanLoader
+from loaders import ComanLoader, ComanCollaboratorLoader
 from azure.search.documents.indexes.models import (
     SearchableField,
     SearchField,
@@ -23,16 +23,16 @@ import time
 load_dotenv()
 
 comanDict = {
-    # ComanScheme.ACTUA.value: "1482edab-dac9-4400-bcd7-ab2dd28b96d2",
-    # ComanScheme.DOSSIERS.value: "8516a849-55ee-4f7a-ad33-e7c6b089ee8f",
+    ComanScheme.ACTUA.value: "1482edab-dac9-4400-bcd7-ab2dd28b96d2",
+    ComanScheme.DOSSIERS.value: "8516a849-55ee-4f7a-ad33-e7c6b089ee8f",
     # ComanScheme.JURISDICTION.value: "b8c42024-2e29-4e50-b05b-8c888e85f932",
-    # ComanScheme.SYLLABI.value: "21340ce4-1459-45c0-983d-8ae7f048fcf0",
+    ComanScheme.SYLLABI.value: "21340ce4-1459-45c0-983d-8ae7f048fcf0",
     # ComanScheme.QUESTION_ANSWER.value: "48a35c82-ed45-4cc2-87b6-cbbd6160f870",
     # ComanScheme.MEDIA.value: "e1381008-7228-4261-b92b-6d8b4152874a",
-    # ComanScheme.WEBTEXTS.value: "24230396-013a-442d-92dd-cfb6338f8203"
-    ComanScheme.DEPARTMENTS.value: "6fbe435f-d2ce-415a-93d9-f7f83b28db25",
-    ComanScheme.TOOLS.value: "15d6b179-6fb0-4b25-b4f5-afb066dcc6df",
-    ComanScheme.EVENTS.value: "b47061f1-3cec-4c98-8fa6-5d012ee61dc1",
+    # ComanScheme.WEBTEXTS.value: "24230396-013a-442d-92dd-cfb6338f8203",
+    # ComanScheme.DEPARTMENTS.value: "6fbe435f-d2ce-415a-93d9-f7f83b28db25",
+    # ComanScheme.TOOLS.value: "15d6b179-6fb0-4b25-b4f5-afb066dcc6df",
+    # ComanScheme.EVENTS.value: "b47061f1-3cec-4c98-8fa6-5d012ee61dc1",
 }
 
 comanContentSchemeFields = {
@@ -91,6 +91,19 @@ comanContentSchemeFields = {
         "Description",
         "Name",
     ],
+}
+
+comanImageSchemeFields = {
+    ComanScheme.ACTUA.value: "Image",
+    ComanScheme.DOSSIERS.value: "Image",
+    ComanScheme.JURISDICTION.value: "Image",
+    ComanScheme.SYLLABI.value: "Image",
+    ComanScheme.QUESTION_ANSWER.value: "Image",
+    ComanScheme.MEDIA.value: "Image",
+    ComanScheme.WEBTEXTS.value: "Photo",
+    ComanScheme.DEPARTMENTS.value: "Logo",
+    ComanScheme.TOOLS.value: "Logo",
+    ComanScheme.EVENTS.value: "Picture",
 }
 
 AZURE_SEARCH_KEY = str(os.getenv("AZURE_SEARCH_KEY"))
@@ -159,15 +172,15 @@ fields = [
         filterable=True,
         sortable=True,
     ),
-    SearchableField(
+    SearchField(
         name="categories",
-        type=SearchFieldDataType.String,
+        type=SearchFieldDataType.Collection(SearchFieldDataType.String),
         searchable=False,
         filterable=True,
     ),
-    SearchableField(
+    SearchField(
         name="domains",
-        type=SearchFieldDataType.String,
+        type=SearchFieldDataType.Collection(SearchFieldDataType.String),
         searchable=False,
         filterable=True,
     ),
@@ -212,10 +225,22 @@ fields = [
         type=SearchFieldDataType.String,
         searchable=False,
         filterable=True,
+    ),
+    SearchableField(
+        name="image",
+        type=SearchFieldDataType.String,
+        searchable=False,
+        filterable=False,
+    ),
+    SearchableField(
+        name="link",
+        type=SearchFieldDataType.String,
+        searchable=False,
+        filterable=False,
     )
 ]
 
-index_name: str = os.getenv("AZURE_SEARCH_INDEX_NAME")
+index_name: str = str(os.getenv("AZURE_SEARCH_INDEX_NAME"))
 vector_store: AzureSearch = AzureSearch(
     azure_search_endpoint=str(os.getenv("AZURE_SEARCH_BASE_URL")),
     azure_search_key=AZURE_SEARCH_KEY,
@@ -228,7 +253,8 @@ html2text = Html2TextTransformer()
 
 print('start loading: ', datetime.datetime.now())
 for scheme in comanDict:
-    loader = ComanLoader.ComanLoader(comanDict[scheme], comanContentSchemeFields[scheme], scheme)
+    print("start loading " + scheme + ": ", datetime.datetime.now())
+    loader = ComanLoader.ComanLoader(comanDict[scheme], comanContentSchemeFields[scheme], comanImageSchemeFields[scheme], scheme)
 
     documents = loader.lazy_load()
     # Transform the document (html to text, skip images, etc.)
@@ -249,4 +275,9 @@ for scheme in comanDict:
 
     print(scheme + " done")
     print('done loading ' + scheme + ': ', datetime.datetime.now())
+
+
+# people = ComanCollaboratorLoader.ComanCollaboratorLoader().lazy_load()
+# # vector_store.add_documents(people)
+# print(people)
 # docs = vector_store.similarity_search("Wanneer wordt Brusselse woonfiscaliteit hervormd?", k=2, filters="source eq '3f37ed58-cd2b-4c76-af56-b1b5fb5a8861'")

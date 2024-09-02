@@ -12,8 +12,26 @@ from datetime import datetime
 from chat.chat_state import ChatState
 from langchain_core.documents import Document
 import json
-from chat.conversational_rag_chain import create_conversational_rag_chain
-from langchain_core.chat_history import BaseChatMessageHistory, InMemoryChatMessageHistory
+from chat.conversational_tools_executor import create_conversational_tool_executor
+from typing import List
+from langchain_core.pydantic_v1 import BaseModel, Field
+from langchain_core.messages import BaseMessage
+from langchain_core.chat_history import BaseChatMessageHistory
+from langchain.agents import create_tool_calling_agent
+from langchain.agents import AgentExecutor
+from chat.write_email import generate_email
+
+class InMemoryHistory(BaseChatMessageHistory, BaseModel):
+    """In memory implementation of chat message history."""
+
+    messages: List[BaseMessage] = Field(default_factory=list)
+
+    def add_messages(self, messages: List[BaseMessage]) -> None:
+        """Add a list of messages to the store"""
+        self.messages.extend(messages)
+
+    def clear(self) -> None:
+        self.messages = []
 
 load_dotenv()
 
@@ -56,8 +74,8 @@ def document_data(conversational_rag_chain: RunnableWithMessageHistory, query):
     ChatState.question = query
     ChatState.chain_id = str(uuid.uuid4())
     return conversational_rag_chain.invoke(
-        {"input": query},
-        config={"configurable": {"session_id": "abc123"},"callbacks": [CustomHandler()]},
+        {"input": query}, #, "context": ""
+        config={"configurable": {"session_id": "abc1234"},"callbacks": [CustomHandler()]},
     )   
     
 if __name__ == '__main__':
@@ -68,8 +86,13 @@ if __name__ == '__main__':
        st.session_state["chat_answers_history"]=[]
     if "last_generated_prompt" not in st.session_state:
        st.session_state["last_generated_prompt"]='test'
-    if "system_prompt" not in st.session_state:
-       st.session_state["system_prompt"]="""You are an assistant for question-answering tasks. 
+
+    st.header("QA ChatBot")
+    # ChatInput
+    prompt = st.chat_input("Enter your questions here")
+
+    with st.sidebar:
+        system_prompt = st.text_area(value="""You are an assistant for question-answering tasks. 
                                      
 You can only use the following pieces of retrieved context to answer the question. 
                                      
@@ -81,32 +104,23 @@ You will have a chat history, but you must only answer the last question.
                                      
 You MUST answer in dutch.
                                      
-The date of today is: """ + str(datetime.now())       
-    if "nr_of_docs_to_retrieve" not in st.session_state:
-       st.session_state["nr_of_docs_to_retrieve"]=3
-    if "score_threshold" not in st.session_state:
-       st.session_state["score_threshold"]=float(0.7)
-
-    st.header("QA ChatBot")
-    # ChatInput
-    prompt = st.chat_input("Enter your questions here")
-
-    with st.sidebar:
-        st.session_state["system_prompt"] = st.text_area(value=st.session_state["system_prompt"], label="Systeem prompt", height=275
+The date of today is: """ + str(datetime.now()), label="Systeem prompt", height=275
 , help="""Eerst wordt gezocht naar de x (hieronder te configureren) best matchende documenten in de vector store. 
 Vervolgens wordt deze systeem prompt, samen met de inhoud van die documenten naar de llm gestuurd om een antwoord te genereren
 """)
-        st.session_state["nr_of_docs_to_retrieve"] = st.number_input(value=st.session_state["nr_of_docs_to_retrieve"], label="Aantal documenten die meegestuurd worden", min_value=1,
+        nr_of_docs_to_retrieve = st.number_input(value=3, label="Aantal documenten die meegestuurd worden", min_value=1,
             help="Aantal documenten die opgehaald worden uit de vector store en meegestuurd worden naar de llm")
         
-        st.session_state["score_threshold"] = st.number_input(value=st.session_state["score_threshold"], label="Minimum niveau van zekerheid over document", min_value=float(0), max_value=float(1), step=float(0.01),
+        score_threshold = st.number_input(value=float(0.7), label="Minimum niveau van zekerheid over document", min_value=float(0), max_value=float(1), step=float(0.01),
             help="Getal tussen 0 en 1 dat aangeeft hoe zeker de vector store minstens moet zijn over een document om het terug te geven. 0 is alle document terug geven ongeacht de zekerheid, 1 zal zo goed als geen enkel document teruggeven")
 
         context = st.selectbox("Selecteer je context", options=["CIB-lid", "Niet CIB-lid", "Syllabusverbod"], help="""
                      CIB-Lid: Toegang tot alles\n
                      Niet CIB-lid: Enkel toegang tot publieke zaken (geen bijlages)\n
                      Syllabusverbod: Toegang tot alles behalve syllabi\n
-                     """)      
+                     """)
+        
+       
 
     if "user_prompt_history" not in st.session_state:
        st.session_state["user_prompt_history"]=[]
@@ -121,27 +135,27 @@ Vervolgens wordt deze systeem prompt, samen met de inhoud van die documenten naa
 
             def get_session_history(session_id: str) -> BaseChatMessageHistory:
                 if session_id not in st.session_state["store"]:
-                    st.session_state["store"][session_id] = InMemoryChatMessageHistory()
-                return st.session_state["store"][session_id]
-            chain=create_conversational_rag_chain(
-                st.session_state["system_prompt"],
-                context,
-                st.session_state["nr_of_docs_to_retrieve"],
-                st.session_state["score_threshold"],
-                get_session_history)
-            output=document_data(query=prompt, conversational_rag_chain=chain)
+                    st.session_state["store"][session_id] = InMemoryHistory()
+                # return st.session_state["store"][session_id]
+                return InMemoryHistory()
+            
+            agent=create_conversational_tool_executor(system_prompt,context,nr_of_docs_to_retrieve,score_threshold, get_session_history, prompt)
+            res=document_data(query=prompt, conversational_rag_chain=agent)
+            print(res)
+            answer = res
 
-            # Storing the questions, answers and chat history
-            answer=output['answer']
-            sources=[]
-            for c in output['context']:
-                if c.metadata['type'] == "Actua":                    
-                    sources.append(f"[{c.metadata['title']}](https://cib.be/actua/{c.metadata['source']}/blabla)\n")
-                else:
-                    sources.append(f"[{c.metadata['title']}](https://cib.be/kennis/{c.metadata['source']}/blabla)\n")
-            if(len(sources) > 0):
-                answer += "\n#### Bronnen:\n" 
-                answer += "\n".join(sources)
+            # output = res.get("output")
+            # # Storing the questions, answers and chat history
+            # answer=output['answer']
+            # sources=[]
+            # for c in output['context']:
+            #     if c.metadata['type'] == "Actua":
+            #         sources.append(f"[{c.metadata['title']}](https://cib.be/actua/{c.metadata['source']}/blabla)\n")
+            #     else:
+            #         sources.append(f"[{c.metadata['title']}](https://cib.be/kennis/{c.metadata['source']}/blabla)\n")
+            # if(len(sources) > 0):
+            #     answer += "\n#### Bronnen:\n" 
+            #     answer += "\n".join(sources)
             st.session_state["user_prompt_history"].append(prompt)
             st.session_state["chat_answers_history"].append(answer)
 
@@ -152,8 +166,8 @@ Vervolgens wordt deze systeem prompt, samen met de inhoud van die documenten naa
     # Displaying the chat history
 
     if st.session_state["chat_answers_history"]:
-       for i, j in zip(st.session_state["chat_answers_history"],st.session_state["user_prompt_history"]):
-          message1 = st.chat_message("user")
-          message1.write(j)
-          message2 = st.chat_message("assistant")
-          message2.write(i)
+        for i, j in zip(st.session_state["chat_answers_history"],st.session_state["user_prompt_history"]):
+            message1 = st.chat_message("user")
+            message1.write(j)
+            message2 = st.chat_message("assistant")
+            message2.write(i)

@@ -37,6 +37,8 @@ class CustomAzureSearchVectorStoreRetriever(BaseRetriever):
         "semantic_hybrid",
         "semantic_hybrid_score_threshold",
     )
+    """A key-value pair with the key being the type and the value being a number between 0 and 1 with which the score for all retrieved documents of that type will be increased"""
+    score_increase_per_type: Dict[str, float] = {}
 
     filters: str | None = None
 
@@ -73,32 +75,24 @@ class CustomAzureSearchVectorStoreRetriever(BaseRetriever):
         if self.search_type == "similarity":
             docs = self.vectorstore.vector_search(query, k=high_k,**kwargs)
         elif self.search_type == "similarity_score_threshold":
-            docs = [
-                doc
-                for doc, _ in self.vectorstore.similarity_search_with_relevance_scores(
-                    query, k=high_k, **kwargs
-                )
-            ]
+            results = self.vectorstore.similarity_search_with_relevance_scores(query, k=high_k, **kwargs)
+            results.sort(key=lambda x: x[1] + self.score_increase_per_type[x[0].metadata['type']] if x[0].metadata['type'] in self.score_increase_per_type else x[1], reverse=True)
+            docs = [doc for doc, _ in results]
         elif self.search_type == "hybrid":
             docs = self.vectorstore.hybrid_search(query, k=high_k, **kwargs)
         elif self.search_type == "hybrid_score_threshold":
-            docs = [
-                doc
-                for doc, _ in self.vectorstore.hybrid_search_with_relevance_scores(
-                    query, k=high_k, **kwargs
-                )
-            ]
+            results = self.vectorstore.hybrid_search_with_relevance_scores(query, k=high_k, **kwargs)
+            results.sort(key=lambda x: x[1] + self.score_increase_per_type[x[0].metadata['type']] if x[0].metadata['type'] in self.score_increase_per_type else x[1], reverse=True)
+            docs = [doc for doc, _ in results]
         elif self.search_type == "semantic_hybrid":
             docs = self.vectorstore.semantic_hybrid_search(query, k=high_k, **kwargs)
         elif self.search_type == "semantic_hybrid_score_threshold":
-            docs = [
-                doc
-                for doc, _ in self.vectorstore.semantic_hybrid_search_with_score(
-                    query, k=high_k, **kwargs
-                )
-            ]
+            results = self.vectorstore.semantic_hybrid_search_with_score(query, k=high_k, **kwargs)
+            results.sort(key=lambda x: x[1] + self.score_increase_per_type[x[0].metadata['type']] if x[0].metadata['type'] in self.score_increase_per_type else x[1], reverse=True)
+            docs = [doc for doc, _ in results]
         else:
             raise ValueError(f"search_type of {self.search_type} not allowed.")
+
         #sorts the docs with the specified types by date while preserving the position of the other docs
         docs = self.sort_with_date_relevancy(docs, [ComanScheme.ACTUA.value, ComanScheme.JURISDICTION.value, ComanScheme.MEDIA.value])
         #return the k most relevant docs
@@ -143,5 +137,6 @@ class CustomAzureSearchVectorStoreRetriever(BaseRetriever):
     def add_date_info_to_page_content(self, docs: List[Document]) -> List[Document]:
         """Add date information to the page content of the documents"""
         for i, doc in enumerate(docs):
-            doc.page_content = f"<bron{i+1}>\nDatum van de bron: {doc.metadata['date']}\n{doc.page_content}</bron{i+1}>\n"
+            if 'date' in doc.metadata:
+                doc.page_content = f"<bron{i+1}>\nDatum van de bron: {doc.metadata['date']}\n{doc.page_content}</bron{i+1}>\n"
         return docs

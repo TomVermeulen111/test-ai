@@ -7,30 +7,36 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_community.vectorstores.azuresearch import AzureSearch
 from langchain_openai import AzureOpenAIEmbeddings
 from chat.CustomAzureSearchVectorStoreRetriever import CustomAzureSearchVectorStoreRetriever
-from chat.write_email import write_email
 from langchain.tools.render import render_text_description
 from datetime import datetime
 from langchain_core.chat_history import InMemoryChatMessageHistory
+from chat.write_email import generate_email
+from langchain.retrievers import EnsembleRetriever
         
 def create_conversational_rag_chain(
-        system_prompt="""Act as a professional assistant for CIB that answers questions of our members who are mainly realestate brokers and syndics.
-Your instructions are to help the CIB-members with all their questions, from general questions, questions about CIB organization, online tools, juridical questions etc.
-The end goal is that the conversation partner is well informed and doesn't need to ask the question to a human (legal) expert in real-estate.
-You can only use the following pieces of retrieved context to answer the question.
-If you cannot answer the question with the provided context or there is no context provided, inform the user that you do not have enough information to answer the question.
-If you find multiple answers or if your answer would be too generic, ask the user to specify his question more. Indicate where he needs to specify.
-Use four sentences maximum and keep the answer concise and don't use overly flawed language.
-You will have a chat history, but you must only answer the last question.
-You MUST answer in dutch.
-The date of today is: """ + str(datetime.now()), 
+        system_prompt="""You are an assistant for question-answering tasks. 
+                                        
+    You can only use the following pieces of retrieved context to answer the question.
+                                        
+    If you cannot answer the question with the provided context or there is no context provided, inform the user that you do not have enough information to answer the question
+                                        
+    Use three sentences maximum and keep the answer concise.
+                                        
+    You will have a chat history, but you must only answer the last question.
+                                        
+    You MUST answer in dutch.
+                                        
+    The date of today is: """ + str(datetime.now()), 
         context="CIB-lid", 
         nr_of_docs_to_retrieve=3, 
         score_threshold=0.7, 
-        get_session_history=lambda session_id: InMemoryChatMessageHistory()
+        get_session_history=lambda session_id: InMemoryChatMessageHistory(),
+        score_increases_per_type={"Syllabi": 0.02, "Rechtspraak": 0.02}
     ):   
     # https://python.langchain.com/v0.1/docs/use_cases/question_answering/chat_history/
 
-    index_name=str(os.getenv("AZURE_SEARCH_INDEX_NAME"))
+    coman_index_name=str(os.getenv("AZURE_SEARCH_INDEX_NAME"))
+    modeldocs_index_name=str(os.getenv("AZURE_SEARCH_MODELDOCS_INDEX_NAME"))
 
     llm = AzureChatOpenAI(
         openai_api_version=str(os.getenv("AZURE_OPENAI_API_VERSION")),
@@ -65,42 +71,64 @@ The date of today is: """ + str(datetime.now()),
         azure_deployment=os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME"),
     )
 
-    vector_store: AzureSearch = AzureSearch(
+    coman_vector_store: AzureSearch = AzureSearch(
         azure_search_endpoint=str(os.getenv("AZURE_SEARCH_BASE_URL")),
         azure_search_key=AZURE_SEARCH_KEY,
-        index_name=index_name,
+        index_name=coman_index_name,
+        embedding_function=embeddings.embed_query
+    )
+
+    modeldocs_vector_store: AzureSearch = AzureSearch(
+        azure_search_endpoint=str(os.getenv("AZURE_SEARCH_BASE_URL")),
+        azure_search_key=AZURE_SEARCH_KEY,
+        index_name=modeldocs_index_name,
         embedding_function=embeddings.embed_query
     )
 
     retriever = CustomAzureSearchVectorStoreRetriever(
-        vectorstore=vector_store, 
+        vectorstore=coman_vector_store,
         k=nr_of_docs_to_retrieve, 
         filters=get_filter_for_context(context), 
-        tags=vector_store._get_retriever_tags(),
+        tags=coman_vector_store._get_retriever_tags(),
+        search_type="similarity_score_threshold",
+        score_threshold=score_threshold,
+        score_increase_per_type=score_increases_per_type
+    )
+
+    modeldocs_retriever = CustomAzureSearchVectorStoreRetriever(
+        vectorstore=modeldocs_vector_store, 
+        k=nr_of_docs_to_retrieve, 
+        filters=get_filter_for_context(context), 
+        tags=coman_vector_store._get_retriever_tags(),
         search_type="similarity_score_threshold",
         score_threshold=score_threshold
     )
 
-    rendered_tools = render_text_description([write_email])
+#     rendered_tools = render_text_description([generate_email])
 
-    system_prompt = f"""
-You have access to the following set of tools. Here are the names and descriptions for each tool:
+#     system_prompt = f"""
+# You have access to the following set of tools. Here are the names and descriptions for each tool:
 
-{rendered_tools}
+# {rendered_tools}
 
-Given the user input, return the result of the tool to use.
-When a tool is available for a specific task, DO NOT ANSWER THE QUESTION YOURSELF BUT USE THE TOOL INSTEAD AND RETURN ITS RESULT!
-    """ + system_prompt
-                                             
+# Given the user input, return the result of the tool to use.
+# When a tool is available for a specific task, DO NOT ANSWER THE QUESTION YOURSELF BUT USE THE TOOL INSTEAD AND RETURN ITS RESULT!
+#     """ + system_prompt
+
+    ensemble_retriever = EnsembleRetriever(retrievers=[retriever, modeldocs_retriever], weights=[0.5, 0.5])
+
     history_aware_retriever = create_history_aware_retriever(
-        llm, retriever, contextualize_q_prompt
+        llm, ensemble_retriever, contextualize_q_prompt
     )
 
+
     ### Answer question ###
-    qa_system_prompt = system_prompt + """"
+    qa_system_prompt = """
     <context>
     {context}
-    </context>"""
+    </context>
+    """ + system_prompt
+
     qa_prompt = ChatPromptTemplate.from_messages(
         [
             ("system", qa_system_prompt),
